@@ -53,6 +53,7 @@ from impacket.examples.utils import parse_target
 from impacket import version, smbserver
 from impacket.dcerpc.v5 import transport, scmr
 from impacket.krb5.keytab import Keytab
+from impacket.examples import serviceinstall
 
 OUTPUT_FILENAME = '__output'
 SMBSERVER_DIR   = '__tmp'
@@ -201,9 +202,12 @@ class RemoteShell(cmd.Cmd):
             myIPaddr = s.getSMBServer().get_socket().getsockname()[0]
             self.__copyBack = 'copy %s \\\\%s\\%s' % (self.__output, myIPaddr, DUMMY_SHARE)
 
-        self.__scmr.bind(scmr.MSRPC_UUID_SCMR)
-        resp = scmr.hROpenSCManagerW(self.__scmr)
-        self.__scHandle = resp['lpScHandle']
+        # self.__scmr.bind(scmr.MSRPC_UUID_SCMR)
+        # resp = scmr.hROpenSCManagerW(self.__scmr)
+        # self.__scHandle = resp['lpScHandle']
+        self.__serviceInstall = serviceinstall.ServiceInstall(rpc.get_smb_connection(), "exeFile", self.__serviceName)
+
+        self.__scHandle = self.__serviceInstall.openSvcManager()
         self.transferClient = rpc.get_smb_connection()
         self.do_cd('')
 
@@ -284,16 +288,22 @@ class RemoteShell(cmd.Cmd):
         command += ' & ' + 'del ' + batchFile
 
         logging.debug('Executing %s' % command)
-        resp = scmr.hRCreateServiceW(self.__scmr, self.__scHandle, self.__serviceName, self.__serviceName,
-                                     lpBinaryPathName=command, dwStartType=scmr.SERVICE_DEMAND_START)
-        service = resp['lpServiceHandle']
+
+        # self.__serviceInstall.createService()
+        
+        #resp = scmr.hRCreateServiceW(self.__scmr, self.__scHandle, self.__serviceName, self.__serviceName,
+        #                             lpBinaryPathName=command, dwStartType=scmr.SERVICE_DEMAND_START)
+        # service = resp['lpServiceHandle']
+
+        service = self.__serviceInstall.createService(self.__scHandle, "share",command)
 
         try:
            scmr.hRStartServiceW(self.__scmr, service)
         except:
            pass
-        scmr.hRDeleteService(self.__scmr, service)
-        scmr.hRCloseServiceHandle(self.__scmr, service)
+        # scmr.hRDeleteService(self.__scmr, service)
+        # scmr.hRCloseServiceHandle(self.__scmr, service)
+        self.__serviceInstall.uninstall()
         self.get_output()
 
     def send_data(self, data):
